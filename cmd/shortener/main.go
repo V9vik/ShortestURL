@@ -1,99 +1,113 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/base32"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
 )
 
 type urlStore struct {
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	store map[string]string
 }
 
-var (
-	store     urlStore
-	idCounter = 9
-)
+var store = urlStore{
+	store: make(map[string]string),
+}
 
 func generateID() (string, error) {
-	buf := make([]byte, idCounter)
+	buf := make([]byte, 8)
 	_, err := rand.Read(buf)
 	if err != nil {
 		return "", err
 	}
-	return base32.StdEncoding.EncodeToString(buf), nil
+	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf), nil
 }
 
 func handlerPost(res http.ResponseWriter, req *http.Request) {
 	if req.URL.Path != "/" {
 		http.NotFound(res, req)
 		return
-
 	}
 
 	if req.Method != http.MethodPost {
-		res.WriteHeader(http.StatusBadRequest)
+		http.Error(res, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if !strings.HasPrefix(req.Header.Get("Content-Type"), "text/plain") {
-		res.WriteHeader(http.StatusBadRequest)
+	contentType := req.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "text/plain") {
+		http.Error(res, "Invalid content type", http.StatusBadRequest)
 		return
 	}
 
 	url, err := io.ReadAll(req.Body)
 	if err != nil || len(url) == 0 {
-		res.WriteHeader(http.StatusBadRequest)
+		http.Error(res, "Empty body", http.StatusBadRequest)
 		return
 	}
 
 	var shortID string
 	for {
+		var err error
 		shortID, err = generateID()
 		if err != nil {
-			res.WriteHeader(http.StatusInternalServerError)
+			http.Error(res, "Internal error", http.StatusInternalServerError)
 			return
 		}
+
 		store.mu.Lock()
-		_, exists := store.store[shortID]
-		store.mu.Unlock()
-		if !exists {
+		if _, exists := store.store[shortID]; !exists {
+			store.store[shortID] = string(url)
+			store.mu.Unlock()
 			break
 		}
+		store.mu.Unlock()
 	}
-	store.store[shortID] = string(url)
 
 	res.Header().Set("Content-Type", "text/plain")
 	res.WriteHeader(http.StatusCreated)
-	io.WriteString(res, "http://localhost:8080/"+shortID+"\n")
+	io.WriteString(res, "http://localhost:8080/"+shortID)
 }
 
 func handlerGet(res http.ResponseWriter, req *http.Request) {
-	path := strings.TrimPrefix(req.URL.Path, "/")
-	if path == "" {
-		res.WriteHeader(http.StatusBadRequest)
+	if req.Method != http.MethodGet {
+		http.Error(res, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	store.mu.Lock()
-	longURL, exists := store.store[path]
-	store.mu.Unlock()
+
+	id := strings.TrimPrefix(req.URL.Path, "/")
+	if id == "" {
+		http.Error(res, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	store.mu.RLock()
+	longURL, exists := store.store[id]
+	store.mu.RUnlock()
+
 	if !exists {
-		res.WriteHeader(http.StatusNotFound)
+		http.NotFound(res, req)
 		return
 	}
+
 	res.Header().Set("Location", longURL)
 	res.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/{id}", handlerGet)
-	mux.HandleFunc("/", handlerPost)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			handlerPost(w, r)
+		} else {
+			handlerGet(w, r)
+		}
+	})
 
 	log.Println("Server started on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
