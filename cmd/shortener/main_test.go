@@ -10,23 +10,19 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGenerateID(t *testing.T) {
 	t.Run("valid ID generation", func(t *testing.T) {
 		id, err := generateID()
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
+		assert.NoError(t, err)
+		assert.Len(t, id, 13)
 
-		if len(id) != 13 {
-			t.Errorf("Expected ID length 13, got %d", len(id))
-		}
-
-		encoder := base32.StdEncoding.WithPadding(base32.NoPadding)
-		if _, err := encoder.DecodeString(id); err != nil {
-			t.Errorf("Invalid base32 string: %v", err)
-		}
+		_, err = base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(id)
+		assert.NoError(t, err)
 	})
 
 	t.Run("uniqueness check", func(t *testing.T) {
@@ -40,16 +36,12 @@ func TestGenerateID(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				id, err := generateID()
-				if err != nil {
-					t.Errorf("Generation error: %v", err)
-					return
-				}
+				assert.NoError(t, err)
 
 				mu.Lock()
 				defer mu.Unlock()
-				if _, exists := ids[id]; exists {
-					t.Errorf("Duplicate ID found: %s", id)
-				}
+				_, exists := ids[id]
+				assert.False(t, exists)
 				ids[id] = struct{}{}
 			}()
 		}
@@ -62,13 +54,13 @@ func TestGenerateID(t *testing.T) {
 
 		rand.Reader = &faultyReader{}
 		_, err := generateID()
-		if err == nil {
-			t.Error("Expected error, got nil")
-		}
+		assert.Error(t, err)
 	})
 }
 
 func TestHandlerPost(t *testing.T) {
+	router := setupRouter()
+
 	tests := []struct {
 		name         string
 		method       string
@@ -110,38 +102,36 @@ func TestHandlerPost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/", bytes.NewBufferString(tt.body))
+			store.mu.Lock()
+			store.store = make(map[string]string)
+			store.mu.Unlock()
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.method, "/", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", tt.contentType)
 
-			rr := httptest.NewRecorder()
-			handlerPost(rr, req)
+			router.ServeHTTP(w, req)
 
-			if rr.Code != tt.wantStatus {
-				t.Errorf("Status code = %v, want %v", rr.Code, tt.wantStatus)
-			}
-
-			if tt.wantContains != "" && !strings.Contains(rr.Body.String(), tt.wantContains) {
-				t.Errorf("Body = %v, should contain %v", rr.Body.String(), tt.wantContains)
+			assert.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantContains != "" {
+				assert.Contains(t, w.Body.String(), tt.wantContains)
 			}
 
 			if tt.wantStatus == http.StatusCreated {
-				id := strings.TrimPrefix(rr.Body.String(), "http://localhost:8080/")
+				id := strings.TrimPrefix(w.Body.String(), "http://localhost:8080/")
 				store.mu.RLock()
-				defer store.mu.RUnlock()
-				if _, exists := store.store[id]; !exists {
-					t.Errorf("Generated ID %s not found in storage", id)
-				}
+				_, exists := store.store[id]
+				store.mu.RUnlock()
+				assert.True(t, exists)
 			}
 		})
 	}
 }
 
 func TestHandlerGet(t *testing.T) {
+	router := setupRouter()
 	testID := "testid123"
 	testURL := "https://example.org"
-	store.mu.Lock()
-	store.store[testID] = testURL
-	store.mu.Unlock()
 
 	tests := []struct {
 		name         string
@@ -179,24 +169,40 @@ func TestHandlerGet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.url, nil)
-			rr := httptest.NewRecorder()
+			store.mu.Lock()
+			store.store = map[string]string{testID: testURL}
+			store.mu.Unlock()
 
-			handlerGet(rr, req)
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.method, tt.url, nil)
 
-			if rr.Code != tt.wantStatus {
-				t.Errorf("Status code = %v, want %v", rr.Code, tt.wantStatus)
-			}
+			router.ServeHTTP(w, req)
 
-			if location := rr.Header().Get("Location"); location != tt.wantLocation {
-				t.Errorf("Location header = %v, want %v", location, tt.wantLocation)
+			assert.Equal(t, tt.wantStatus, w.Code)
+			if tt.wantLocation != "" {
+				assert.Equal(t, tt.wantLocation, w.Header().Get("Location"))
 			}
 		})
 	}
+}
+
+func setupRouter() *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/", handlerPost)
+	router.GET("/:id", handlerGet)
+	return router
 }
 
 type faultyReader struct{}
 
 func (r *faultyReader) Read(p []byte) (n int, err error) {
 	return 0, errors.New("simulated read error")
+}
+
+func TestMain(m *testing.M) {
+	store = urlStore{
+		store: make(map[string]string),
+	}
+	m.Run()
 }
