@@ -86,7 +86,7 @@ func main() {
 	router := gin.Default()
 
 	router.POST("/", handlerPost)
-	router.GET("/", handlerGet)
+	router.GET("/:id", handlerGet)
 	if err := router.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}
