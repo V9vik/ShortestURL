@@ -16,9 +16,11 @@ type urlStore struct {
 	store map[string]string
 }
 
-var store = urlStore{
-	store: make(map[string]string),
-}
+var (
+	store = urlStore{
+		store: make(map[string]string),
+	}
+)
 
 func generateID() (string, error) {
 	buf := make([]byte, 8)
