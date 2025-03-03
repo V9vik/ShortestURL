@@ -26,5 +26,7 @@ func LoadConfig() *Config {
 		}
 	}
 
+	cfg.BaseURL = strings.TrimSuffix(cfg.BaseURL, "/")
+
 	return &cfg
 }
