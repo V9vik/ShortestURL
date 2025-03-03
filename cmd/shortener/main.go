@@ -93,8 +93,8 @@ func main() {
 	router.POST("/", handlerPost)
 	router.GET("/:id", handlerGet)
 
-	log.Println("Server start in:", cfg.UrlBase)
-	log.Println(cfg.UrlBase)
+	log.Println("Server start in:", cfg.URLBase)
+	log.Println(cfg.URLBase)
 	log.Println(cfg.Port)
 	if err := router.Run(cfg.Port); err != nil {
 		log.Fatal(err)

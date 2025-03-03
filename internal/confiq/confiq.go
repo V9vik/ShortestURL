@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	UrlBase string
+	URLBase string
 	Port    string
 }
 
@@ -23,7 +23,7 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		UrlBase: urlBase,
+		URLBase: urlBase,
 		Port:    address,
 	}
 }
