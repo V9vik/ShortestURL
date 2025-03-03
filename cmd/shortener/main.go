@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base32"
+	"github.com/V9vik/ShortestURL.git/internal/confiq"
 	"github.com/gin-gonic/gin"
 	"io"
 	"log"
@@ -85,11 +86,17 @@ func handlerGet(c *gin.Context) {
 }
 
 func main() {
-	router := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
 
+	cfg := confiq.LoadConfig()
+	router := gin.Default()
 	router.POST("/", handlerPost)
 	router.GET("/:id", handlerGet)
-	if err := router.Run(":8080"); err != nil {
+
+	log.Println("Server start in:", cfg.UrlBase)
+	log.Println(cfg.UrlBase)
+	log.Println(cfg.Port)
+	if err := router.Run(cfg.Port); err != nil {
 		log.Fatal(err)
 	}
 }
