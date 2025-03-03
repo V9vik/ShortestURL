@@ -2,6 +2,7 @@ package confiq
 
 import (
 	"flag"
+	"fmt"
 )
 
 type Config struct {
@@ -10,18 +11,19 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	var port string
+	var address string
 	var urlBase string
-	flag.StringVar(&port, "a", "localhost:8080", "port to run server on")
-	flag.StringVar(&urlBase, "b", "", "url to shortest URL")
+
+	flag.StringVar(&address, "a", "localhost:8080", "server address (host:port)")
+	flag.StringVar(&urlBase, "b", "", "base URL for short links")
 	flag.Parse()
+
 	if urlBase == "" {
-		urlBase += "http://" + port
+		urlBase = fmt.Sprintf("http://%s/", address)
 	}
 
 	return &Config{
 		UrlBase: urlBase,
-		Port:    port,
+		Port:    address,
 	}
-
 }
