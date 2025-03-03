@@ -3,27 +3,28 @@ package confiq
 import (
 	"flag"
 	"fmt"
+	"strings"
 )
 
 type Config struct {
-	URLBase string
-	Port    string
+	Address string
+	BaseURL string
 }
 
 func LoadConfig() *Config {
-	var address string
-	var urlBase string
+	var cfg Config
 
-	flag.StringVar(&address, "a", "localhost:8080", "server address (host:port)")
-	flag.StringVar(&urlBase, "b", "", "base URL for short links")
+	flag.StringVar(&cfg.Address, "a", "localhost:8080", "HTTP server address")
+	flag.StringVar(&cfg.BaseURL, "b", "", "Base URL for short links")
 	flag.Parse()
 
-	if urlBase == "" {
-		urlBase = fmt.Sprintf("http://%s/", address)
+	if cfg.BaseURL == "" {
+		if strings.HasPrefix(cfg.Address, ":") {
+			cfg.BaseURL = fmt.Sprintf("http://localhost%s", cfg.Address)
+		} else {
+			cfg.BaseURL = fmt.Sprintf("http://%s", cfg.Address)
+		}
 	}
 
-	return &Config{
-		URLBase: urlBase,
-		Port:    address,
-	}
+	return &cfg
 }
