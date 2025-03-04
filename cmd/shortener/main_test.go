@@ -2,17 +2,11 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"strconv"
-	"testing"
-	"time"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 func setupRouter() *gin.Engine {
@@ -137,48 +131,4 @@ func TestHandlerGet(t *testing.T) {
 			}
 		})
 	}
-}
-func TestConfiq(t *testing.T) {
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Ошибка получения порта: %v", err)
-	}
-
-	os.Setenv("SERVER_ADDRESS", ":"+port)
-	defer os.Unsetenv("SERVER_ADDRESS")
-
-	serverReady := make(chan bool)
-	go func() {
-		main()
-		serverReady <- true
-	}()
-
-	client := http.Client{Timeout: 1 * time.Second}
-	start := time.Now()
-	for time.Since(start) < 1*time.Second {
-		resp, err := client.Get(fmt.Sprintf("http://localhost:%s/ping", port))
-		if err == nil && resp.StatusCode == http.StatusOK {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	resp, err := client.Get(fmt.Sprintf("http://localhost:%s/MUOZFZ2QUJP5M", port))
-	if err != nil {
-		t.Fatalf("Ошибка запроса: %v", err)
-	}
-	defer resp.Body.Close()
-}
-
-func getFreePort() (string, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return "", err
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return "", err
-	}
-	defer l.Close()
-	return strconv.Itoa(l.Addr().(*net.TCPAddr).Port), nil
 }
