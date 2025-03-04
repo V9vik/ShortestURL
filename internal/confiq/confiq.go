@@ -3,8 +3,8 @@ package confiq
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
-	"strings"
 )
 
 type Config struct {
@@ -15,16 +15,18 @@ type Config struct {
 func LoadConfig() *Config {
 	var cfg Config
 
-	flag.StringVar(&cfg.Address, "a", "localhost:8080", "Адрес запуска HTTP-сервера")
+	defaultAddress := "localhost:8080"
+
+	flag.StringVar(&cfg.Address, "a", defaultAddress, "Адрес запуска HTTP-сервера")
 	flag.StringVar(&cfg.BaseURL, "b", "", "Базовый адрес сокращенного URL")
 	flag.Parse()
 
 	if envPort := os.Getenv("SERVER_PORT"); envPort != "" {
-		if !strings.Contains(cfg.Address, ":") {
-			cfg.Address = "localhost:" + envPort
-		} else {
-			cfg.Address = strings.Split(cfg.Address, ":")[0] + ":" + envPort
+		host, _, err := net.SplitHostPort(cfg.Address)
+		if err != nil {
+			host = "localhost"
 		}
+		cfg.Address = net.JoinHostPort(host, envPort)
 	}
 
 	if cfg.BaseURL == "" {
