@@ -14,28 +14,21 @@ type Config struct {
 
 func LoadConfig() *Config {
 	var cfg Config
-	flag.StringVar(&cfg.Address, "a", "", "Адрес запуска HTTP-сервера")
-	flag.StringVar(&cfg.BaseURL, "b", "", "Базовый адрес результирующего сокращенного URL")
 
+	flag.StringVar(&cfg.Address, "a", "localhost:8080", "Адрес запуска HTTP-сервера")
+	flag.StringVar(&cfg.BaseURL, "b", "", "Базовый адрес сокращенного URL")
 	flag.Parse()
-	if envAddr := os.Getenv("SERVER_ADDRESS"); envAddr != "" {
-		cfg.Address = envAddr
-	}
 
-	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
-		cfg.BaseURL = envBaseURL
-	}
-
-	if cfg.Address == "" {
-		cfg.Address = "localhost:8080"
+	if envPort := os.Getenv("SERVER_PORT"); envPort != "" {
+		if !strings.Contains(cfg.Address, ":") {
+			cfg.Address = "localhost:" + envPort
+		} else {
+			cfg.Address = strings.Split(cfg.Address, ":")[0] + ":" + envPort
+		}
 	}
 
 	if cfg.BaseURL == "" {
-		if strings.HasPrefix(cfg.Address, ":") {
-			cfg.BaseURL = fmt.Sprintf("http://localhost%s", cfg.Address)
-		} else {
-			cfg.BaseURL = fmt.Sprintf("http://%s", cfg.Address)
-		}
+		cfg.BaseURL = fmt.Sprintf("http://%s", cfg.Address)
 	}
 
 	return &cfg
