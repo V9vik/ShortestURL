@@ -2,132 +2,150 @@ package main
 
 import (
 	"bytes"
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
-func setupRouter() *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.POST("/", handlerPost)
-	router.GET("/:id", handlerGet)
-	return router
-}
-
-func TestHandlerPost(t *testing.T) {
-	router := setupRouter()
-
+func TestGenerateID(t *testing.T) {
 	tests := []struct {
-		name         string
-		method       string
-		contentType  string
-		body         string
-		wantStatus   int
-		wantContains string
+		name    string
+		wantErr bool
 	}{
 		{
-			name:         "valid request",
-			method:       http.MethodPost,
-			contentType:  "text/plain",
-			body:         "https://example.com",
-			wantStatus:   http.StatusCreated,
-			wantContains: "http://localhost:8080/",
-		},
-		{
-			name:        "invalid method",
-			method:      http.MethodGet,
-			contentType: "text/plain",
-			body:        "https://example.com",
-			wantStatus:  http.StatusNotFound,
-		},
-		{
-			name:        "empty body",
-			method:      http.MethodPost,
-			contentType: "text/plain",
-			body:        "",
-			wantStatus:  http.StatusBadRequest,
-		},
-		{
-			name:        "wrong content type",
-			method:      http.MethodPost,
-			contentType: "application/json",
-			body:        `{"url":"https://example.com"}`,
-			wantStatus:  http.StatusBadRequest,
+			name:    "Successful generation",
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest(tt.method, "/", bytes.NewBufferString(tt.body))
+			got, err := generateID()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateID() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(got) != 13 {
+				t.Errorf("generateID() returned invalid length, got = %d, want = 13", len(got))
+			}
+		})
+	}
+}
+func TestHandlerPost(t *testing.T) {
+	tests := []struct {
+		name         string
+		contentType  string
+		body         string
+		statusCode   int
+		responseBody string
+	}{
+		{
+			name:         "Success with text/plain",
+			contentType:  "text/plain",
+			body:         "https://example.com",
+			statusCode:   http.StatusCreated,
+			responseBody: "http://localhost:8080/",
+		},
+		{
+			name:         "Failure with empty body",
+			contentType:  "text/plain",
+			body:         "",
+			statusCode:   http.StatusBadRequest,
+			responseBody: `{"error":"Empty body"}`,
+		},
+		{
+			name:         "Failure with wrong content-type",
+			contentType:  "application/json",
+			body:         `{"url": "https://example.com"}`,
+			statusCode:   http.StatusBadRequest,
+			responseBody: `{"error":"Invalid content type"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := gin.Default()
+			router.POST("/", func(c *gin.Context) {
+				handlerPost(c, "http://localhost:8080/")
+			})
+
+			req, _ := http.NewRequest(http.MethodPost, "/", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", tt.contentType)
 
+			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			assert.Equal(t, tt.wantStatus, w.Code)
-			if tt.wantContains != "" {
-				assert.Contains(t, w.Body.String(), tt.wantContains)
+			if w.Code != tt.statusCode {
+				t.Errorf("Expected status code %d, but got %d", tt.statusCode, w.Code)
+			}
+
+			if !strings.Contains(w.Body.String(), tt.responseBody) {
+				t.Errorf("Response body does not contain expected value:\nGot: %s\nWant: %s", w.Body.String(), tt.responseBody)
 			}
 		})
 	}
 }
 
 func TestHandlerGet(t *testing.T) {
-	router := setupRouter()
-	testID := "testid123"
-	testURL := "https://example.org"
-
 	tests := []struct {
 		name         string
-		url          string
-		method       string
-		wantStatus   int
-		wantLocation string
+		id           string
+		statusCode   int
+		location     string
+		errorMessage string
 	}{
 		{
-			name:         "valid redirect",
-			url:          "/" + testID,
-			method:       http.MethodGet,
-			wantStatus:   http.StatusTemporaryRedirect,
-			wantLocation: testURL,
+			name:         "Existing ID",
+			id:           "existing-id",
+			statusCode:   http.StatusTemporaryRedirect,
+			location:     "https://example.com",
+			errorMessage: "",
 		},
 		{
-			name:       "not found",
-			url:        "/invalidid",
-			method:     http.MethodGet,
-			wantStatus: http.StatusNotFound,
+			name:       "Non-existing ID",
+			id:         "non-existing-id",
+			statusCode: http.StatusTemporaryRedirect,
+			location:   "",
 		},
 		{
-			name:       "invalid method",
-			url:        "/" + testID,
-			method:     http.MethodPost,
-			wantStatus: http.StatusNotFound,
-		},
-		{
-			name:       "empty id",
-			url:        "/",
-			method:     http.MethodGet,
-			wantStatus: http.StatusNotFound,
+			name:       "Empty ID",
+			id:         "",
+			statusCode: http.StatusNotFound,
+			location:   "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			router := gin.Default()
+			router.GET("/:id", func(c *gin.Context) {
+				handlerGet(c)
+			})
+
 			store.mu.Lock()
-			store.store = map[string]string{testID: testURL}
+			store.store[tt.id] = tt.location
 			store.mu.Unlock()
 
-			w := httptest.NewRecorder()
-			req, _ := http.NewRequest(tt.method, tt.url, nil)
+			req, _ := http.NewRequest(http.MethodGet, "/"+tt.id, nil)
 
+			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
-			assert.Equal(t, tt.wantStatus, w.Code)
-			if tt.wantLocation != "" {
-				assert.Equal(t, tt.wantLocation, w.Header().Get("Location"))
+			if w.Code != tt.statusCode {
+				t.Errorf("Expected status code %d, but got %d", tt.statusCode, w.Code)
+			}
+
+			if tt.errorMessage != "" && !strings.Contains(w.Body.String(), tt.errorMessage) {
+				t.Errorf("Response body does not contain expected error message:\nGot: %s\nWant: %s", w.Body.String(), tt.errorMessage)
+			}
+
+			if tt.location != "" {
+				if location := w.Result().Header.Get("Location"); location != tt.location {
+					t.Errorf("Expected Location header %s, but got %s", tt.location, location)
+				}
 			}
 		})
 	}

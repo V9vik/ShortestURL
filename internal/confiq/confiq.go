@@ -12,14 +12,14 @@ type Config struct {
 	BaseURL string
 }
 
-func LoadConfig() *Config {
+func NewConfigFromFlags(flagSet *flag.FlagSet) *Config {
 	var cfg Config
 
 	defaultAddress := "localhost:8080"
 
-	flag.StringVar(&cfg.Address, "a", defaultAddress, "Адрес запуска HTTP-сервера")
-	flag.StringVar(&cfg.BaseURL, "b", "", "Базовый адрес сокращенного URL")
-	flag.Parse()
+	flagSet.StringVar(&cfg.Address, "a", defaultAddress, "Адрес запуска HTTP-сервера")
+	flagSet.StringVar(&cfg.BaseURL, "b", "", "Базовый адрес сокращенного URL")
+	flagSet.Parse(os.Args[1:])
 
 	if envPort := os.Getenv("SERVER_PORT"); envPort != "" {
 		host, _, err := net.SplitHostPort(cfg.Address)
@@ -34,4 +34,8 @@ func LoadConfig() *Config {
 	}
 
 	return &cfg
+}
+
+func LoadConfig() *Config {
+	return NewConfigFromFlags(flag.CommandLine)
 }

@@ -32,7 +32,7 @@ func generateID() (string, error) {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf), nil
 }
 
-func handlerPost(c *gin.Context) {
+func handlerPost(c *gin.Context, address string) {
 	contentType := c.GetHeader("Content-Type")
 	if !strings.HasPrefix(contentType, "text/plain") {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid content type"})
@@ -63,10 +63,9 @@ func handlerPost(c *gin.Context) {
 		store.mu.Unlock()
 	}
 
-	c.String(http.StatusCreated, "http://localhost:8080/%s", shortID)
+	c.String(http.StatusCreated, address+"/%s", shortID)
 }
 func handlerGet(c *gin.Context) {
-
 	id := c.Param("id")
 	if id == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Bad request"})
@@ -84,18 +83,17 @@ func handlerGet(c *gin.Context) {
 
 	c.Redirect(http.StatusTemporaryRedirect, longURL)
 }
-
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
 	cfg := confiq.LoadConfig()
 	router := gin.Default()
-	router.POST("/", handlerPost)
+	router.POST("/", func(c *gin.Context) {
+		handlerPost(c, cfg.BaseURL)
+	})
 	router.GET("/:id", handlerGet)
 
-	log.Println("Server start in:", cfg.BaseURL)
-	log.Println(cfg.BaseURL)
-	log.Println(cfg.Address)
+	log.Println("Server starting on:", cfg.BaseURL)
 	if err := router.Run(cfg.Address); err != nil {
 		log.Fatal(err)
 	}
