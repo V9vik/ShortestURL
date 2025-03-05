@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -88,7 +89,6 @@ func TestHandlerPost(t *testing.T) {
 		})
 	}
 }
-
 func TestHandlerGet(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -134,16 +134,26 @@ func TestHandlerGet(t *testing.T) {
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
 
+			resp := w.Result()
+			defer resp.Body.Close() // Добавлено закрытие тела ответа
+
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Failed to read response body: %v", err)
+			}
+
+			bodyStr := string(bodyBytes)
+
 			if w.Code != tt.statusCode {
 				t.Errorf("Expected status code %d, but got %d", tt.statusCode, w.Code)
 			}
 
-			if tt.errorMessage != "" && !strings.Contains(w.Body.String(), tt.errorMessage) {
-				t.Errorf("Response body does not contain expected error message:\nGot: %s\nWant: %s", w.Body.String(), tt.errorMessage)
+			if tt.errorMessage != "" && !strings.Contains(bodyStr, tt.errorMessage) {
+				t.Errorf("Response body does not contain expected error message:\nGot: %s\nWant: %s", bodyStr, tt.errorMessage)
 			}
 
 			if tt.location != "" {
-				if location := w.Result().Header.Get("Location"); location != tt.location {
+				if location := resp.Header.Get("Location"); location != tt.location {
 					t.Errorf("Expected Location header %s, but got %s", tt.location, location)
 				}
 			}
