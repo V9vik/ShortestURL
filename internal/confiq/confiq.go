@@ -1,4 +1,4 @@
-package confiq
+package config
 
 import (
 	"flag"

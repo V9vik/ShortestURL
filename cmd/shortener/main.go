@@ -21,10 +21,11 @@ var (
 	store = urlStore{
 		store: make(map[string]string),
 	}
+	IdLength int = 8
 )
 
 func generateID() (string, error) {
-	buf := make([]byte, 8)
+	buf := make([]byte, IdLength)
 	_, err := rand.Read(buf)
 	if err != nil {
 		return "", err
@@ -86,7 +87,7 @@ func handlerGet(c *gin.Context) {
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
-	cfg := confiq.LoadConfig()
+	cfg := config.LoadConfig()
 	router := gin.Default()
 	router.POST("/", func(c *gin.Context) {
 		handlerPost(c, cfg.BaseURL)
