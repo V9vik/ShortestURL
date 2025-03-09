@@ -21,11 +21,11 @@ var (
 	store = urlStore{
 		store: make(map[string]string),
 	}
-	IdLength int = 8
+	IDLength = 8
 )
 
 func generateID() (string, error) {
-	buf := make([]byte, IdLength)
+	buf := make([]byte, IDLength)
 	_, err := rand.Read(buf)
 	if err != nil {
 		return "", err
