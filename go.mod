@@ -2,6 +2,8 @@ module github.com/V9vik/ShortestURL.git
 
 go 1.23.0
 
+toolchain go1.24.1
+
 require github.com/gin-gonic/gin v1.10.0
 
 require (
