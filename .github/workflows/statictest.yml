@@ -13,17 +13,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: apt-get update && apt-get install -y file
+      - name: Detect architecture
+        run: echo "ARCH=$(uname -m)" >> $GITHUB_ENV
 
       - name: Install statictest
         run: |
-          curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64 -o statictest
+          # Скачиваем версию, соответствующую архитектуре
+          if [ "$ARCH" = "x86_64" ]; then
+            curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64 -o statictest
+          elif [ "$ARCH" = "aarch64" ]; then
+            curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-arm64 -o statictest
+          else
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+          fi
+
           chmod +x statictest
           mv statictest /usr/local/bin/
 
       - name: Verify binary
-        run: file /usr/local/bin/statictest
+        run: |
+          ldd /usr/local/bin/statictest || true
+          /usr/local/bin/statictest -version
 
       - name: Run vet
         run: go vet -vettool=$(which statictest) ./...
