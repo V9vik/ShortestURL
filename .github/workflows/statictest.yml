@@ -13,6 +13,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install dependencies
+        run: apt-get update && apt-get install -y file
+
       - name: Install statictest
         run: |
           curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64 -o statictest
@@ -20,9 +23,7 @@ jobs:
           mv statictest /usr/local/bin/
 
       - name: Verify binary
-        run: |
-          file /usr/local/bin/statictest
-          statictest -version
+        run: file /usr/local/bin/statictest
 
       - name: Run vet
         run: go vet -vettool=$(which statictest) ./...
