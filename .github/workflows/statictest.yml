@@ -3,31 +3,38 @@ name: go vet test
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   statictest:
     runs-on: ubuntu-latest
-    container: golang:1.22
+    container:
+      image: golang:1.24
+      options: --platform=linux/amd64  # Явно указываем архитектуру
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Download statictest binary
-        uses: robinraju/release-downloader@v1.8
-        with:
-          repository: Yandex-Practicum/go-autotests
-          latest: true
-          fileName: statictest
-          out-file-path: .tools
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup autotest binary
+      - name: Verify Go version
         run: |
-          chmod -R +x $GITHUB_WORKSPACE/.tools/statictest
-          mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
+          go version
+          echo "GO_VERSION=$(go version | awk '{print $3}')" >> $GITHUB_ENV
 
-      - name: Run statictest
+      - name: Install statictest (AMD64)
+        if: ${{ env.GO_VERSION == 'go1.24' }}
         run: |
+          # Принудительно скачиваем версию для AMD64
+          curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64 -o statictest
+          chmod +x statictest
+          mv statictest /usr/local/bin/
+          statictest -version
+
+      - name: Update Go modules
+        run: |
+          go mod edit -go=1.24
+          go mod tidy
+
+      - name: Run vet
+        run: |
+          unset GOTOOLCHAIN
           go vet -vettool=$(which statictest) ./...
