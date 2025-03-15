@@ -4,9 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"github.com/V9vik/ShortestURL.git/internal/confiq"
+	"github.com/V9vik/ShortestURL.git/internal/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -87,15 +88,29 @@ func handlerGet(c *gin.Context) {
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
+	logger, err := zap.NewDevelopment()
+
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+
+	sugar := logger.Sugar()
+
 	cfg := config.LoadConfig()
+
 	router := gin.Default()
+
+	router.Use(ginLogger(sugar))
+
 	router.POST("/", func(c *gin.Context) {
 		handlerPost(c, cfg.BaseURL)
 	})
+
 	router.GET("/:id", handlerGet)
 
-	log.Println("Server starting on:", cfg.BaseURL)
+	sugar.Info("Server starting on:", cfg.BaseURL)
 	if err := router.Run(cfg.Address); err != nil {
-		log.Fatal(err)
+		sugar.Fatal(err)
 	}
 }
