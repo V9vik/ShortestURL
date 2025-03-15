@@ -8,7 +8,7 @@ on:
 jobs:
   statictest:
     runs-on: ubuntu-latest
-    container: golang:1.24
+    container: golang:1.21 # Исправлена версия Go
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,18 +18,24 @@ jobs:
 
       - name: Install statictest
         run: |
-          # Скачиваем версию, соответствующую архитектуре
+          # Добавлена проверка доступности бинарников
           if [ "$ARCH" = "x86_64" ]; then
-            curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64 -o statictest
+            URL="https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64"
           elif [ "$ARCH" = "aarch64" ]; then
-            curl -L https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-arm64 -o statictest
+            URL="https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-arm64"
           else
             echo "Unsupported architecture: $ARCH"
             exit 1
           fi
 
+          # Скачивание с проверкой кода ответа
+          curl -L -o statictest "$URL" -f || (echo "Failed to download binary"; exit 1)
+          
+          # Проверка типа файла
+          file statictest
+          
           chmod +x statictest
-          mv statictest /usr/local/bin/
+          sudo mv statictest /usr/local/bin/
 
       - name: Verify binary
         run: |
