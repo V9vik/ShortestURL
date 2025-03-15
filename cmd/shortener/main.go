@@ -88,20 +88,20 @@ func handlerGet(c *gin.Context) {
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
-	logger, err := zap.NewDevelopment()
+	log, err := zap.NewDevelopment()
 
 	if err != nil {
 		panic(err)
 	}
-	defer logger.Sync()
+	defer log.Sync()
 
-	sugar := logger.Sugar()
+	sugar := log.Sugar()
 
 	cfg := config.LoadConfig()
 
 	router := gin.Default()
 
-	router.Use(ginLogger(sugar))
+	router.Use(logger.GinLogger(sugar))
 
 	router.POST("/", func(c *gin.Context) {
 		handlerPost(c, cfg.BaseURL)

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func ginLogger(log *zap.SugaredLogger) gin.HandlerFunc {
+func GinLogger(log *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
