@@ -3,8 +3,11 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base32"
+	"github.com/V9vik/ShortestURL.git/internal/confiq"
+	"github.com/V9vik/ShortestURL.git/internal/logger"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,12 +18,15 @@ type urlStore struct {
 	store map[string]string
 }
 
-var store = urlStore{
-	store: make(map[string]string),
-}
+var (
+	store = urlStore{
+		store: make(map[string]string),
+	}
+	IDLength = 8
+)
 
 func generateID() (string, error) {
-	buf := make([]byte, 8)
+	buf := make([]byte, IDLength)
 	_, err := rand.Read(buf)
 	if err != nil {
 		return "", err
@@ -28,26 +34,16 @@ func generateID() (string, error) {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf), nil
 }
 
-func handlerPost(res http.ResponseWriter, req *http.Request) {
-	if req.URL.Path != "/" {
-		http.NotFound(res, req)
-		return
-	}
-
-	if req.Method != http.MethodPost {
-		http.Error(res, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	contentType := req.Header.Get("Content-Type")
+func handlerPost(c *gin.Context, address string) {
+	contentType := c.GetHeader("Content-Type")
 	if !strings.HasPrefix(contentType, "text/plain") {
-		http.Error(res, "Invalid content type", http.StatusBadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid content type"})
 		return
 	}
 
-	url, err := io.ReadAll(req.Body)
+	url, err := io.ReadAll(c.Request.Body)
 	if err != nil || len(url) == 0 {
-		http.Error(res, "Empty body", http.StatusBadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Empty body"})
 		return
 	}
 
@@ -56,7 +52,7 @@ func handlerPost(res http.ResponseWriter, req *http.Request) {
 		var err error
 		shortID, err = generateID()
 		if err != nil {
-			http.Error(res, "Internal error", http.StatusInternalServerError)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal error"})
 			return
 		}
 
@@ -69,20 +65,12 @@ func handlerPost(res http.ResponseWriter, req *http.Request) {
 		store.mu.Unlock()
 	}
 
-	res.Header().Set("Content-Type", "text/plain")
-	res.WriteHeader(http.StatusCreated)
-	io.WriteString(res, "http://localhost:8080/"+shortID)
+	c.String(http.StatusCreated, address+"/%s", shortID)
 }
-
-func handlerGet(res http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		http.Error(res, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	id := strings.TrimPrefix(req.URL.Path, "/")
+func handlerGet(c *gin.Context) {
+	id := c.Param("id")
 	if id == "" {
-		http.Error(res, "Bad request", http.StatusBadRequest)
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Bad request"})
 		return
 	}
 
@@ -91,26 +79,38 @@ func handlerGet(res http.ResponseWriter, req *http.Request) {
 	store.mu.RUnlock()
 
 	if !exists {
-		http.NotFound(res, req)
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Not found"})
 		return
 	}
 
-	res.Header().Set("Location", longURL)
-	res.WriteHeader(http.StatusTemporaryRedirect)
+	c.Redirect(http.StatusTemporaryRedirect, longURL)
 }
-
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			handlerPost(w, r)
-		} else {
-			handlerGet(w, r)
-		}
+	gin.SetMode(gin.ReleaseMode)
+
+	log, err := zap.NewDevelopment()
+
+	if err != nil {
+		panic(err)
+	}
+	defer log.Sync()
+
+	sugar := log.Sugar()
+
+	cfg := config.LoadConfig()
+
+	router := gin.Default()
+
+	router.Use(logger.GinLogger(sugar))
+
+	router.POST("/", func(c *gin.Context) {
+		handlerPost(c, cfg.BaseURL)
 	})
 
-	log.Println("Server started on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatal("Server failed: ", err)
+	router.GET("/:id", handlerGet)
+
+	sugar.Info("Server starting on:", cfg.BaseURL)
+	if err := router.Run(cfg.Address); err != nil {
+		sugar.Fatal(err)
 	}
 }

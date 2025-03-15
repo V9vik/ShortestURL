@@ -3,31 +3,44 @@ name: go vet test
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   statictest:
     runs-on: ubuntu-latest
-    container: golang:1.22
+    container: golang:1.21 # Исправлена версия Go
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Download statictest binary
-        uses: robinraju/release-downloader@v1.8
-        with:
-          repository: Yandex-Practicum/go-autotests
-          latest: true
-          fileName: statictest
-          out-file-path: .tools
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Detect architecture
+        run: echo "ARCH=$(uname -m)" >> $GITHUB_ENV
 
-      - name: Setup autotest binary
+      - name: Install statictest
         run: |
-          chmod -R +x $GITHUB_WORKSPACE/.tools/statictest
-          mv $GITHUB_WORKSPACE/.tools/statictest /usr/local/bin/statictest
+          # Добавлена проверка доступности бинарников
+          if [ "$ARCH" = "x86_64" ]; then
+            URL="https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-amd64"
+          elif [ "$ARCH" = "aarch64" ]; then
+            URL="https://github.com/Yandex-Practicum/go-autotests/releases/download/v0.6.0/statictest-linux-arm64"
+          else
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+          fi
 
-      - name: Run statictest
+          # Скачивание с проверкой кода ответа
+          curl -L -o statictest "$URL" -f || (echo "Failed to download binary"; exit 1)
+          
+          # Проверка типа файла
+          file statictest
+          
+          chmod +x statictest
+          sudo mv statictest /usr/local/bin/
+
+      - name: Verify binary
         run: |
-          go vet -vettool=$(which statictest) ./...
+          ldd /usr/local/bin/statictest || true
+          /usr/local/bin/statictest -version
+
+      - name: Run vet
+        run: go vet -vettool=$(which statictest) ./...
